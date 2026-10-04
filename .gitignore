@@ -1,0 +1,13 @@
+host/.env
+host/data/
+*.apk
+local.properties
+.gradle/
+**/build/
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+__pycache__/
+*.pyc

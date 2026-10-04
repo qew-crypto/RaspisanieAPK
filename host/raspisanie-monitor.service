@@ -1,0 +1,15 @@
+[Unit]
+Description=Schedule monitor for school 6 Gukovo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/raspisanie/host
+EnvironmentFile=/opt/raspisanie/host/.env
+ExecStart=/opt/raspisanie/host/venv/bin/python monitor.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
