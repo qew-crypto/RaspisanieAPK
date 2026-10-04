@@ -11,6 +11,10 @@
         android:title="@string/menu_status"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_host"
+        android:title="@string/menu_host"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_browser"
         android:title="@string/menu_browser"
         app:showAsAction="never" />

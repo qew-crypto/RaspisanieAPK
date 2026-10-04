@@ -1,5 +1,7 @@
 host/.env
 host/data/
+host/firebase-service-account.json
+android/app/google-services.json
 *.apk
 local.properties
 .gradle/

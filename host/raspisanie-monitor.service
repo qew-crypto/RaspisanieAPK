@@ -1,5 +1,5 @@
 [Unit]
-Description=Schedule monitor for school 6 Gukovo
+Description=Schedule monitor for the school app
 After=network-online.target
 Wants=network-online.target
 
@@ -8,7 +8,7 @@ Type=simple
 WorkingDirectory=/opt/raspisanie/host
 EnvironmentFile=/opt/raspisanie/host/.env
 ExecStart=/opt/raspisanie/host/venv/bin/python monitor.py
-Restart=on-failure
+Restart=always
 RestartSec=10
 
 [Install]

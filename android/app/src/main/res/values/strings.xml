@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Расписание</string>
-    <string name="school">МБОУ СШ №6</string>
     <string name="status_loading">Проверяю обновление…</string>
     <string name="status_offline">Нет связи с сайтом</string>
     <string name="menu_refresh">Обновить</string>
     <string name="menu_status">Когда обновлено</string>
     <string name="menu_browser">Открыть в браузере</string>
+    <string name="menu_host">Сервер уведомлений</string>
     <string name="menu_about">О приложении</string>
     <string name="notify_title">Расписание обновлено</string>
     <string name="notify_channel">Обновления расписания</string>
-    <string name="about_text">Приложение показывает сайт расписания МБОУ СШ №6 (г. Гуково).\n\nПока приложение закрыто, о новом расписании пишет Telegram-бот с хоста. Сам телефон раз в 5 минут это надёжно не проверяет.</string>
+    <string name="host_title">Сервер уведомлений</string>
+    <string name="host_hint">http://192.168.1.10:8080</string>
+    <string name="host_invalid">Нужен адрес вида http://хост:8080</string>
+    <string name="about_text">Приложение показывает сайт расписания МБОУ СШ №6 (г. Гуково).\n\nЧтобы уведомление приходило при закрытом приложении, на хосте должен работать монитор. Его адрес указывается в меню «Сервер уведомлений».</string>
 </resources>

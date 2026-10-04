@@ -1,24 +1,25 @@
 package ru.gukovo.school6.schedule
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -33,6 +34,14 @@ class MainActivity : ComponentActivity() {
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var toolbar: MaterialToolbar
     private var latest: ScheduleInfo? = null
+    private val registrar by lazy { DeviceRegistrar(this) }
+
+    private val updated = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            toolbar.subtitle = intent?.getStringExtra("body")
+            webView.reload()
+        }
+    }
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -46,7 +55,10 @@ class MainActivity : ComponentActivity() {
         webView = findViewById(R.id.web)
         setSupportActionBar(toolbar)
         setupWebView()
-        refresh.setOnRefreshListener { webView.reload() }
+        refresh.setOnRefreshListener {
+            webView.reload()
+            refreshStatus(notifyIfChanged = true)
+        }
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
         } else {
@@ -54,6 +66,24 @@ class MainActivity : ComponentActivity() {
         }
         askNotificationPermission()
         refreshStatus(notifyIfChanged = true)
+        if (registrar.hostUrl().isNotEmpty()) {
+            registerHost()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ContextCompat.registerReceiver(
+            this,
+            updated,
+            IntentFilter(ACTION_UPDATED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    override fun onStop() {
+        unregisterReceiver(updated)
+        super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -73,9 +103,8 @@ class MainActivity : ComponentActivity() {
                 refreshStatus(notifyIfChanged = true)
             }
             R.id.action_status -> showStatus()
-            R.id.action_browser -> startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(ScheduleClient.SCHEDULE_URL)),
-            )
+            R.id.action_host -> askHost()
+            R.id.action_browser -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ScheduleClient.SCHEDULE_URL)))
             R.id.action_about -> MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.app_name)
                 .setMessage(R.string.about_text)
@@ -86,6 +115,7 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack()
@@ -133,6 +163,43 @@ class MainActivity : ComponentActivity() {
         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    private fun askHost() {
+        val input = EditText(this).apply {
+            setText(registrar.hostUrl())
+            hint = getString(R.string.host_hint)
+            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, 0)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.host_title)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val url = input.text.toString().trim().trimEnd('/')
+                if (url.isEmpty()) {
+                    lifecycleScope.launch(Dispatchers.IO) { registrar.unregisterBlocking() }
+                    registrar.saveHost("")
+                    Toast.makeText(this, "Уведомления с хоста выключены", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    Toast.makeText(this, R.string.host_invalid, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                registrar.saveHost(url)
+                registerHost()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun registerHost() {
+        lifecycleScope.launch {
+            val message = withContext(Dispatchers.IO) { registrar.registerBlocking() }
+            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun refreshStatus(notifyIfChanged: Boolean) {
         toolbar.subtitle = getString(R.string.status_loading)
         lifecycleScope.launch {
@@ -149,7 +216,7 @@ class MainActivity : ComponentActivity() {
             val previous = prefs.getString(KEY_ID, null)
             prefs.edit().putString(KEY_ID, info.scheduleId).apply()
             if (notifyIfChanged && previous != null && previous != info.scheduleId) {
-                showUpdateNotification(info)
+                Notifier.show(this@MainActivity, getString(R.string.notify_title), "Обновлено ${info.relativeText()}")
             }
         }
     }
@@ -161,54 +228,16 @@ class MainActivity : ComponentActivity() {
             refreshStatus(notifyIfChanged = false)
             return
         }
-        val time = info.exportTime ?: "—"
-        val date = info.exportDate ?: "—"
         MaterialAlertDialogBuilder(this)
             .setTitle(info.header())
-            .setMessage("Обновлено ${info.relativeText()}\nДата: $date\nВремя: $time")
+            .setMessage("Обновлено ${info.relativeText()}\nДата: ${info.exportDate ?: "—"}\nВремя: ${info.exportTime ?: "—"}")
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 
-    private fun showUpdateNotification(info: ScheduleInfo) {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-        val manager = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= 26) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    getString(R.string.notify_channel),
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                ),
-            )
-        }
-        val open = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_bell)
-            .setContentTitle(getString(R.string.notify_title))
-            .setContentText("Обновлено ${info.relativeText()}")
-            .setAutoCancel(true)
-            .setContentIntent(open)
-            .build()
-        manager.notify(NOTIFICATION_ID, notification)
-    }
-
     companion object {
+        const val ACTION_UPDATED = "ru.gukovo.school6.schedule.UPDATED"
         private const val PREFS = "schedule_state"
         private const val KEY_ID = "last_schedule_id"
-        private const val CHANNEL_ID = "schedule_updates"
-        private const val NOTIFICATION_ID = 61
     }
 }
